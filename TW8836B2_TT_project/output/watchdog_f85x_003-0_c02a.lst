@@ -1,0 +1,180 @@
+C51 COMPILER V9.52.0.0   WATCHDOG_F85X_003_0_C02A                                          07/10/2016 16:38:40 PAGE 1   
+
+
+C51 COMPILER V9.52.0.0, COMPILATION OF MODULE WATCHDOG_F85X_003_0_C02A
+OBJECT MODULE PLACED IN .\output\watchdog_f85x_003-0_c02a.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE tasks\watchdog_f85x_003-0_c02a.c LARGE OMF2 ROM(D512K) REGFILE(.\output\pro
+                    -ject.ORC) BROWSE INCDIR(.\src) DEBUG PRINT(.\output\watchdog_f85x_003-0_c02a.lst) OBJECT(.\output\watchdog_f85x_003-0_c0
+                    -2a.obj)
+
+line level    source
+
+   1          /*--------------------------------------------------------------------*-
+   2          
+   3            watchdog_f85x_003-0_c02a.c (Released 2015-03)
+   4          
+   5            --------------------------------------------------------------------
+   6             
+   7            Simple 'Watchdog' module for F85x (8051).
+   8          
+   9          -*--------------------------------------------------------------------*/
+  10          /*--------------------------------------------------------------------*-
+  11          
+  12            This code is copyright (c) 2014-2015 SafeTTy Systems Ltd.
+  13          
+  14            This code is adapted from a Time-Triggered Reference Design (TTRD)
+  15            that is documented in the following book: 
+  16          
+  17            Pont, M.J. (2014) 
+  18            "The Engineering of Reliable Embedded Systems: LPC1769 Edition", 
+  19            Published by SafeTTy Systems Ltd. ISBN: 978-0-9930355-0-0.
+  20          
+  21            Both the TTRDs and the above book ("the ERES book") describe 
+  22            patented* technology and are subject to copyright and other 
+  23            restrictions.
+  24          
+  25            This code may be used without charge: [i] by universities and 
+  26            colleges in courses for which a degree up to and including MSc 
+  27            level (or equivalent) is awarded; [ii] for non-commercial projects 
+  28            carried out by individuals and hobbyists.
+  29          
+  30            Where this code has been provided to you as part of a training 
+  31            course delivered by SafeTTy Systems Ltd, you may use it for 
+  32            evaluation purposes for a period of up to 12 months from the 
+  33            end date of this course, subject to the condition that no 
+  34            products (of any kind) based either on this code, or on the 
+  35            patented technology described in the ERES book, are released.
+  36          
+  37            Any and all other use of this code and / or the patented 
+  38            technology described in the ERES book requires purchase of a 
+  39            ReliabiliTTy Technology Licence:
+  40            http://www.safetty.net/products/reliabilitty
+  41          
+  42            Please contact SafeTTy Systems Ltd if you require clarification
+  43            of these licensing arrangements:
+  44            http://www.safetty.net/contact
+  45          
+  46            MoniTTor is a registered trademark of SafeTTy Systems Ltd.
+  47            PredicTTor is a registered trademark of SafeTTy Systems Ltd.
+  48            ReliabiliTTy is a registered trademark of SafeTTy Systems Ltd.
+  49            WarranTTor is a registered trademark of SafeTTy Systems Ltd.
+  50          
+  51            * Patents applied for.
+  52          
+  53          -*--------------------------------------------------------------------*/
+C51 COMPILER V9.52.0.0   WATCHDOG_F85X_003_0_C02A                                          07/10/2016 16:38:40 PAGE 2   
+
+  54          
+  55          // Project header
+  56          #include "../main/main.h"
+  57          
+  58          // Task header
+  59          #include "watchdog_f85x_003-0_c02a.h"
+  60          
+  61          #pragma SAVE
+  62          #pragma OPTIMIZE(8, SIZE)
+  63          
+  64          void watchdog_config(BYTE mode)
+  65          {
+  66   1              SFRB_EWDI = 0;          // Disable WDT Interrupt
+  67   1      
+  68   1              /* SFR_CKCON (0x8E) : base 32kHz clock.
+  69   1              mode WD[1:0]    CLK(on TW8836B) CLK(on FPGA)    Delay
+  70   1              3       00                      2^11                    2^17                    70mSec
+  71   1              2       01                      2^14                    2^20                    540msec
+  72   1              1       10                      2^17                    2^23                    4 sec
+  73   1              0       11                      2^20                    2^26                    32 sec
+  74   1              */
+  75   1              SFR_CKCON &= 0x3F;
+  76   1      
+  77   1              switch (mode)
+  78   1          {
+  79   2              case 0:         SFR_CKCON |= 0xc0;      break;  
+  80   2              case 1:         SFR_CKCON |= 0x80;      break;  
+  81   2              case 2:         SFR_CKCON |= 0x40;      break;  
+  82   2              case 3:         SFR_CKCON |= 0x00;      break;  
+  83   2              default:        SFR_CKCON |= 0xc0;      break;
+  84   2              }
+  85   1              
+  86   1          SFRB_EA   = 0;              // Disable Interrupt
+  87   1              SFR_TA    = 0xaa;
+  88   1              SFR_TA    = 0x55;
+  89   1              SFR_WDCON = 0x03;       // - - - - WDIF WTRF EWT RWT.
+  90   1              SFRB_EA   = 1;          // Enable Interrupt
+  91   1      
+  92   1              SFR_EIP  |= 0x20;       // BK160208:We have 512 counter, is it enough ?
+  93   1              SFRB_EWDI = 1;          // Enable WDT Interrupt (disable for test)
+  94   1      }
+  95          
+  96          /*--------------------------------------------------------------------*-
+  97          
+  98            WATCHDOG_Init()
+  99          
+ 100            Set up watchdog timer on F85x (8051).
+ 101          
+ 102            Based on Sci Labs examples code.
+ 103          
+ 104          -*--------------------------------------------------------------------*/
+ 105          void WATCHDOG_Init(void)
+ 106          {
+ 107   1          watchdog_config(0);
+ 108   1      }
+ 109          
+ 110          /*--------------------------------------------------------------------*-
+ 111          
+ 112            WATCHDOG_Update()
+ 113          
+ 114            Feed the watchdog timer.
+ 115          
+C51 COMPILER V9.52.0.0   WATCHDOG_F85X_003_0_C02A                                          07/10/2016 16:38:40 PAGE 3   
+
+ 116            See Watchdog_Init() for further information.
+ 117          
+ 118          -*--------------------------------------------------------------------*/
+ 119          void WATCHDOG_Update(void)
+ 120          {
+ 121   1              SFRB_EWDI = 0;          // Disable WDT Interrupt
+ 122   1      
+ 123   1              SFRB_EA   = 0;          // Disable Interrupt
+ 124   1              SFR_TA    = 0xaa;
+ 125   1              SFR_TA    = 0x55;
+ 126   1              SFR_WDCON = 0x03;       // - - - - WDIF WTRF EWT RWT.  Reset Watchdog
+ 127   1              SFRB_EA   = 1;          // Enable Interrupt
+ 128   1              
+ 129   1          if (SFR_CACHE_EN == 0)
+ 130   1              SFR_CACHE_EN = 1;
+ 131   1          
+ 132   1              SFRB_EWDI = 1;          // Enable WDT Interrupt (disable for test)
+ 133   1      }
+ 134          
+ 135          void watchdog_int(void) interrupt 12 using 3
+ 136          {
+ 137   1          /*
+ 138   1              disable cache & do not write RWT.
+ 139   1              system will be reset after 512 clock cycle base on 32KHz.
+ 140   1          */
+ 141   1          SFR_CACHE_EN = 0;
+ 142   1      }
+ 143          #pragma RESTORE
+ 144          
+ 145          /*--------------------------------------------------------------------*-
+ 146            ------ END OF FILE -------------------------------------------------
+ 147          -*--------------------------------------------------------------------*/
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     88    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

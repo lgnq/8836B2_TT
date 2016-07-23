@@ -1,0 +1,265 @@
+C51 COMPILER V9.52.0.0   SYSTEM_F85X_003_0_C02B                                            07/10/2016 16:38:39 PAGE 1   
+
+
+C51 COMPILER V9.52.0.0, COMPILATION OF MODULE SYSTEM_F85X_003_0_C02B
+OBJECT MODULE PLACED IN .\output\system_f85x_003-0_c02b.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE system\system_f85x_003-0_c02b.c LARGE OMF2 ROM(D512K) REGFILE(.\output\proj
+                    -ect.ORC) BROWSE INCDIR(.\src) DEBUG PRINT(.\output\system_f85x_003-0_c02b.lst) OBJECT(.\output\system_f85x_003-0_c02b.ob
+                    -j)
+
+line level    source
+
+   1          /*--------------------------------------------------------------------*-
+   2          
+   3            system_f85x_003-0_c02b.c (Released 2015-03)
+   4          
+   5            Controls system configuration after processor reset.
+   6          
+   7            [Two modes supported - "Normal" and "Fail Silent".]
+   8          
+   9          -*--------------------------------------------------------------------*/
+  10          /*--------------------------------------------------------------------*-
+  11          
+  12            This code is copyright (c) 2014-2015 SafeTTy Systems Ltd.
+  13          
+  14            This code is adapted from a Time-Triggered Reference Design (TTRD)
+  15            that is documented in the following book: 
+  16          
+  17            Pont, M.J. (2014) 
+  18            "The Engineering of Reliable Embedded Systems: LPC1769 Edition", 
+  19            Published by SafeTTy Systems Ltd. ISBN: 978-0-9930355-0-0.
+  20          
+  21            Both the TTRDs and the above book ("the ERES book") describe 
+  22            patented* technology and are subject to copyright and other 
+  23            restrictions.
+  24          
+  25            This code may be used without charge: [i] by universities and 
+  26            colleges in courses for which a degree up to and including MSc 
+  27            level (or equivalent) is awarded; [ii] for non-commercial projects 
+  28            carried out by individuals and hobbyists.
+  29          
+  30            Where this code has been provided to you as part of a training 
+  31            course delivered by SafeTTy Systems Ltd, you may use it for 
+  32            evaluation purposes for a period of up to 12 months from the 
+  33            end date of this course, subject to the condition that no 
+  34            products (of any kind) based either on this code, or on the 
+  35            patented technology described in the ERES book, are released.
+  36          
+  37            Any and all other use of this code and / or the patented 
+  38            technology described in the ERES book requires purchase of a 
+  39            ReliabiliTTy Technology Licence:
+  40            http://www.safetty.net/products/reliabilitty
+  41          
+  42            Please contact SafeTTy Systems Ltd if you require clarification
+  43            of these licensing arrangements:
+  44            http://www.safetty.net/contact
+  45          
+  46            MoniTTor is a registered trademark of SafeTTy Systems Ltd.
+  47            PredicTTor is a registered trademark of SafeTTy Systems Ltd.
+  48            ReliabiliTTy is a registered trademark of SafeTTy Systems Ltd.
+  49            WarranTTor is a registered trademark of SafeTTy Systems Ltd.
+  50          
+  51            * Patents applied for.
+  52          
+  53          -*--------------------------------------------------------------------*/
+C51 COMPILER V9.52.0.0   SYSTEM_F85X_003_0_C02B                                            07/10/2016 16:38:39 PAGE 2   
+
+  54          
+  55          // Project header
+  56          #include "../main/main.h"
+  57          
+  58          // Task headers
+  59          #include "../tasks/heartbeat_f85x_003-0_c02b.h"
+  60          #include "../tasks/watchdog_f85x_003-0_c02a.h"
+  61          
+  62          // ------ Public variable definitions ------------------------------
+  63          
+  64          // In many designs, System_mode_G will be used in other modules.
+  65          // - we therefore make this variable public.
+  66          eSystem_mode System_mode_G;
+  67          
+  68          // ------ Private function declarations ----------------------------
+  69          
+  70          void SYSTEM_Identify_Required_Mode(void);
+  71          void SYSTEM_Configure_Required_Mode(void);
+  72          
+  73          /*--------------------------------------------------------------------*-
+  74          
+  75            SYSTEM_Init()
+  76          
+  77            Wrapper for system startup functions.
+  78          
+  79          -*--------------------------------------------------------------------*/
+  80          void SYSTEM_Init(void)
+  81          {
+  82   1              SYSTEM_Identify_Required_Mode();
+  83   1              SYSTEM_Configure_Required_Mode();
+  84   1      }
+  85          
+  86          /*--------------------------------------------------------------------*-
+  87          
+  88            SYSTEM_Identify_Required_Mode()
+  89          
+  90            Try to work out the cause of the system reset.
+  91            Set the system mode accordingly.
+  92          
+  93          -*--------------------------------------------------------------------*/
+  94          void SYSTEM_Identify_Required_Mode(void)
+  95          {
+  96   1              uint8_t WDT_flag = 0;  // Set to 1 if WDT caused latest reset
+  97   1      
+  98   1          //disable watchdog
+  99   1              SFRB_EWDI = 0;          // Disable WDT Interrupt
+ 100   1      
+ 101   1              SFRB_EA   = 0;          //Disable Interrupt
+ 102   1              SFR_TA    = 0xaa;
+ 103   1              SFR_TA    = 0x55;
+ 104   1              SFR_WDCON = 0x00;       // - - - - WDIF WTRF EWT RWT
+ 105   1              SFRB_EA   = 1;          //Enable Interrupt
+ 106   1      
+ 107   1              // Check cause of reset
+ 108   1              // First check the PORSF bit:
+ 109   1              // if PORSF is set, all other RSTSRC flags are indeterminate.
+ 110   1      #if 0
+                      if ((RSTSRC & 0x02) == 0x00)        
+                      {
+                              if (RSTSRC == 0x08)
+                              {
+                                      // Last reset was caused by WDT
+C51 COMPILER V9.52.0.0   SYSTEM_F85X_003_0_C02B                                            07/10/2016 16:38:39 PAGE 3   
+
+                                      WDT_flag = 1;
+                              }
+                      }
+              #endif
+ 120   1          
+ 121   1              if (SFRB_WTRF)
+ 122   1              {
+ 123   2                      // Set system mode (Fail Silent)
+ 124   2                      System_mode_G = FAIL_SILENT;
+ 125   2              }
+ 126   1              else
+ 127   1              {
+ 128   2                      // Here we treat all other forms of reset in the same way
+ 129   2                      // Set system mode (Normal)
+ 130   2                      System_mode_G = NORMAL;
+ 131   2              }
+ 132   1      }
+ 133          
+ 134          /*--------------------------------------------------------------------*-
+ 135          
+ 136            SYSTEM_Configure_Required_Mode()
+ 137          
+ 138            Configure the system in the required mode.  
+ 139          
+ 140          -*--------------------------------------------------------------------*/
+ 141          void SYSTEM_Configure_Required_Mode(void)
+ 142          {
+ 143   1              switch (System_mode_G)
+ 144   1              {
+ 145   2                      default:          // Default to "FAIL_SILENT"
+ 146   2      
+ 147   2                      case FAIL_SILENT:
+ 148   2                              // Reset caused by WDT
+ 149   2                              // Trigger "fail silent" behaviour
+ 150   2                              SYSTEM_Perform_Safe_Shutdown();
+ 151   2      
+ 152   2                              break;
+ 153   2      
+ 154   2                      case NORMAL:
+ 155   2                  mcu_init();
+ 156   2              
+ 157   2                              // Set up WDT 
+ 158   2                              // Set to overflow after ~12ms
+ 159   2                              WATCHDOG_Init();
+ 160   2      
+ 161   2                              // Set up scheduler for 1 ms ticks
+ 162   2                              SCH_Init();
+ 163   2      
+ 164   2                              // Prepare for heartbeat task
+ 165   2                              HEARTBEAT_Init();
+ 166   2      
+ 167   2                              // Add tasks to schedule.
+ 168   2                              // Parameters are:
+ 169   2                              // 1. Task name
+ 170   2                              // 2. Initial delay / offset (in Ticks)
+ 171   2                              // 3. Task period (in Ticks): Must be > 0
+ 172   2                              // 4. Task WCET (in microseconds)
+ 173   2                              // 5. Task BCET (in microseconds)
+ 174   2      
+ 175   2                              // Add watchdog task first
+ 176   2                              SCH_Add_Task(WATCHDOG_Update, 0, 1500, 10, 0);
+ 177   2      
+C51 COMPILER V9.52.0.0   SYSTEM_F85X_003_0_C02B                                            07/10/2016 16:38:39 PAGE 4   
+
+ 178   2                              // Add heartbeat task
+ 179   2                              SCH_Add_Task(HEARTBEAT_Update, 0, 1000, 20, 0);
+ 180   2      
+ 181   2                              // Feed the watchdog
+ 182   2                              WATCHDOG_Update();
+ 183   2      
+ 184   2                              break;
+ 185   2              }
+ 186   1      }
+ 187          
+ 188          /*--------------------------------------------------------------------*-
+ 189          
+ 190            SYSTEM_Perform_Safe_Shutdown()
+ 191          
+ 192            Attempt to move the system into a safe state.
+ 193            Feeds Watchdog Timer.
+ 194          
+ 195          -*--------------------------------------------------------------------*/
+ 196          void SYSTEM_Perform_Safe_Shutdown(void)
+ 197          {
+ 198   1              // Used for simple fault reporting.
+ 199   1              uint16_t Delay, j;
+ 200   1      
+ 201   1              // Feed watchdog
+ 202   1              WATCHDOG_Update();
+ 203   1      
+ 204   1              // Here we simply "fail silent" with rudimentary fault reporting.
+ 205   1              // Other behaviour may make more sense in your design
+ 206   1      
+ 207   1              // *************************************
+ 208   1              // NOTE: This function should NOT return
+ 209   1              // *************************************
+ 210   1      
+ 211   1              HEARTBEAT_Init();
+ 212   1      
+ 213   1              while (1)
+ 214   1              {
+ 215   2                      // Flicker Heartbeat LED to indicate fault
+ 216   2                      for (Delay = 0; Delay < 3000; Delay++)
+ 217   2                      {
+ 218   3                              j *= 3;
+ 219   3                              WATCHDOG_Update();
+ 220   3                      }
+ 221   2      
+ 222   2                      HEARTBEAT_Update2();
+ 223   2              }
+ 224   1      }
+ 225          
+ 226          /*--------------------------------------------------------------------*-
+ 227            ------ END OF FILE -------------------------------------------------
+ 228          -*--------------------------------------------------------------------*/
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    189    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      1       3
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+C51 COMPILER V9.52.0.0   SYSTEM_F85X_003_0_C02B                                            07/10/2016 16:38:39 PAGE 5   
+
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,232 @@
+C51 COMPILER V9.52.0.0   HEARTBEAT_F85X_003_0_C02B                                         07/10/2016 16:38:39 PAGE 1   
+
+
+C51 COMPILER V9.52.0.0, COMPILATION OF MODULE HEARTBEAT_F85X_003_0_C02B
+OBJECT MODULE PLACED IN .\output\heartbeat_f85x_003-0_c02b.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE tasks\heartbeat_f85x_003-0_c02b.c LARGE OMF2 ROM(D512K) REGFILE(.\output\pr
+                    -oject.ORC) BROWSE INCDIR(.\src) DEBUG PRINT(.\output\heartbeat_f85x_003-0_c02b.lst) OBJECT(.\output\heartbeat_f85x_003-0
+                    -_c02b.obj)
+
+line level    source
+
+   1          /*--------------------------------------------------------------------*-
+   2          
+   3            heartbeat_f85x_003-0_c02b.c (Released 2015-03)
+   4          
+   5            --------------------------------------------------------------------
+   6             
+   7            Simple 'Heartbeat' module for F85x (8051).
+   8          
+   9          -*--------------------------------------------------------------------*/
+  10          /*--------------------------------------------------------------------*-
+  11          
+  12            This code is copyright (c) 2014-2015 SafeTTy Systems Ltd.
+  13          
+  14            This code is adapted from a Time-Triggered Reference Design (TTRD)
+  15            that is documented in the following book: 
+  16          
+  17            Pont, M.J. (2014) 
+  18            "The Engineering of Reliable Embedded Systems: LPC1769 Edition", 
+  19            Published by SafeTTy Systems Ltd. ISBN: 978-0-9930355-0-0.
+  20          
+  21            Both the TTRDs and the above book ("the ERES book") describe 
+  22            patented* technology and are subject to copyright and other 
+  23            restrictions.
+  24          
+  25            This code may be used without charge: [i] by universities and 
+  26            colleges in courses for which a degree up to and including MSc 
+  27            level (or equivalent) is awarded; [ii] for non-commercial projects 
+  28            carried out by individuals and hobbyists.
+  29          
+  30            Where this code has been provided to you as part of a training 
+  31            course delivered by SafeTTy Systems Ltd, you may use it for 
+  32            evaluation purposes for a period of up to 12 months from the 
+  33            end date of this course, subject to the condition that no 
+  34            products (of any kind) based either on this code, or on the 
+  35            patented technology described in the ERES book, are released.
+  36          
+  37            Any and all other use of this code and / or the patented 
+  38            technology described in the ERES book requires purchase of a 
+  39            ReliabiliTTy Technology Licence:
+  40            http://www.safetty.net/products/reliabilitty
+  41          
+  42            Please contact SafeTTy Systems Ltd if you require clarification
+  43            of these licensing arrangements:
+  44            http://www.safetty.net/contact
+  45          
+  46            MoniTTor is a registered trademark of SafeTTy Systems Ltd.
+  47            PredicTTor is a registered trademark of SafeTTy Systems Ltd.
+  48            ReliabiliTTy is a registered trademark of SafeTTy Systems Ltd.
+  49            WarranTTor is a registered trademark of SafeTTy Systems Ltd.
+  50          
+  51            * Patents applied for.
+  52          
+  53          -*--------------------------------------------------------------------*/
+C51 COMPILER V9.52.0.0   HEARTBEAT_F85X_003_0_C02B                                         07/10/2016 16:38:39 PAGE 2   
+
+  54          
+  55          // Project header
+  56          #include "../main/main.h"
+  57          
+  58          // Task header
+  59          #include "heartbeat_f85x_003-0_c02b.h"
+  60          
+  61          // ------ Public variable declarations -----------------------------
+  62          
+  63          // See scheduler module for definition
+  64          extern uint8_t Fault_code_G;
+  65          
+  66          /*--------------------------------------------------------------------*-
+  67          
+  68            HEARTBEAT_Init()
+  69          
+  70            Prepare for HEARTBEAT_Update() function - see below.
+  71          
+  72          -*--------------------------------------------------------------------*/
+  73          void HEARTBEAT_Init(void)
+  74          {
+  75   1      //    putchar('X');
+  76   1      }
+  77          
+  78          /*--------------------------------------------------------------------*-
+  79          
+  80            HEARTBEAT_Update()
+  81          
+  82            Must schedule this task for release every second.
+  83          
+  84            Flashes at 0.5 Hz if no fault code.
+  85            Otherwise, displays fault code.
+  86          
+  87            Incorporates injected task overruns (for demo purposes):
+  88            1. after 20 seconds (brief overrun);
+  89            2. after 60 seconds (permanent fault).
+  90          
+  91          -*--------------------------------------------------------------------*/
+  92          void HEARTBEAT_Update(void)
+  93          {
+  94   1              static uint16_t Heartbeat_state = 0;
+  95   1              static uint16_t Fault_state = 0;
+  96   1              static uint16_t Task_overrun_counter = 0;
+  97   1      
+  98   1              // Inject brief task overrun after 20 seconds
+  99   1              // => This should be detected by scheduler (not WDT)
+ 100   1              if (Task_overrun_counter++ == 20)
+ 101   1              {
+ 102   2                      // Wait for task to overrun (see scheduler ISR) ...
+ 103   2                      while (Fault_code_G == 0);
+ 104   2              }
+ 105   1       
+ 106   1              // Inject permanent task overrun after 60 seconds 
+ 107   1              // => This should trigger WDT
+ 108   1              if (Task_overrun_counter == 60)
+ 109   1              {
+ 110   2                      while(1);
+ 111   2              }
+ 112   1      
+ 113   1              if (Fault_code_G == 0)
+ 114   1              {
+ 115   2                      // No faults recorded
+C51 COMPILER V9.52.0.0   HEARTBEAT_F85X_003_0_C02B                                         07/10/2016 16:38:39 PAGE 3   
+
+ 116   2                      // - just flash at 0.5 Hz
+ 117   2      
+ 118   2                      // Change the LED from OFF to ON (or vice versa)
+ 119   2                      if (Heartbeat_state == 1)
+ 120   2                      {
+ 121   3                              Heartbeat_state = 0;
+ 122   3      //                      HEARTBEAT_LED_PIN = 1;
+ 123   3                  putchar('A');
+ 124   3                      }
+ 125   2                      else
+ 126   2                      {
+ 127   3                              Heartbeat_state = 1;
+ 128   3      //                      HEARTBEAT_LED_PIN = 0;
+ 129   3                  putchar('B');
+ 130   3                      }
+ 131   2              }
+ 132   1              else
+ 133   1              {
+ 134   2                      // If we are here, there is a (non-zero) fault code ...
+ 135   2                      Fault_state++;
+ 136   2      
+ 137   2                      if (Fault_state < Fault_code_G*2)
+ 138   2                      {
+ 139   3                              Heartbeat_state = 0;
+ 140   3      //                      HEARTBEAT_LED_PIN = 1;
+ 141   3                  putchar('1');
+ 142   3                      }
+ 143   2                      else
+ 144   2                      {
+ 145   3                              if (Fault_state < Fault_code_G*4)
+ 146   3                              {
+ 147   4                                      // Change the LED from OFF to ON (or vice versa)
+ 148   4                                      if (Heartbeat_state == 1)
+ 149   4                                      {
+ 150   5                                              Heartbeat_state = 0;
+ 151   5      //                                      HEARTBEAT_LED_PIN = 1;
+ 152   5                          putchar('2');
+ 153   5                                      }
+ 154   4                                      else
+ 155   4                                      {
+ 156   5                                              Heartbeat_state = 1;
+ 157   5      //                                      HEARTBEAT_LED_PIN = 0;
+ 158   5                          putchar('3');
+ 159   5                                      }
+ 160   4                              }
+ 161   3                              else
+ 162   3                              {
+ 163   4                                      Fault_state = 0;
+ 164   4                              }
+ 165   3                      }
+ 166   2              }
+ 167   1      }
+ 168          
+ 169          /*--------------------------------------------------------------------*-
+ 170          
+ 171            HEARTBEAT_Update2()
+ 172          
+ 173            Simplified "Heartbeat" function.
+ 174          
+ 175          -*--------------------------------------------------------------------*/
+ 176          void HEARTBEAT_Update2(void)
+ 177          {
+C51 COMPILER V9.52.0.0   HEARTBEAT_F85X_003_0_C02B                                         07/10/2016 16:38:39 PAGE 4   
+
+ 178   1              static uint16_t Heartbeat_state = 0;
+ 179   1      
+ 180   1              // Change the LED from OFF to ON (or vice versa)
+ 181   1              if (Heartbeat_state == 1)
+ 182   1              {
+ 183   2                      Heartbeat_state = 0;
+ 184   2              putchar('0');
+ 185   2      //              HEARTBEAT_LED_PIN = 1;
+ 186   2              }
+ 187   1              else
+ 188   1              {
+ 189   2                      Heartbeat_state = 1;
+ 190   2      //              HEARTBEAT_LED_PIN = 0;
+ 191   2              putchar('1');
+ 192   2              }
+ 193   1      }
+ 194          
+ 195          /*--------------------------------------------------------------------*-
+ 196            ------ END OF FILE -------------------------------------------------
+ 197          -*--------------------------------------------------------------------*/
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    229    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      8    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

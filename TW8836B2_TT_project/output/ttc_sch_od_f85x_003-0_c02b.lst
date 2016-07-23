@@ -1,0 +1,418 @@
+C51 COMPILER V9.52.0.0   TTC_SCH_OD_F85X_003_0_C02B                                        07/10/2016 16:40:27 PAGE 1   
+
+
+C51 COMPILER V9.52.0.0, COMPILATION OF MODULE TTC_SCH_OD_F85X_003_0_C02B
+OBJECT MODULE PLACED IN .\output\ttc_sch_od_f85x_003-0_c02b.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE scheduler\ttc_sch_od_f85x_003-0_c02b.c LARGE OMF2 ROM(D512K) REGFILE(.\outp
+                    -ut\project.ORC) BROWSE INCDIR(.\src) DEBUG PRINT(.\output\ttc_sch_od_f85x_003-0_c02b.lst) OBJECT(.\output\ttc_sch_od_f85
+                    -x_003-0_c02b.obj)
+
+line level    source
+
+   1          /*--------------------------------------------------------------------*-
+   2          
+   3            ttc_sch_od_f85x_003-0_c02b.c (Released 2015-03)
+   4          
+   5            --------------------------------------------------------------------
+   6          
+   7            Time-Triggered Co-operative (TTC) task scheduler for F85x (8051).
+   8          
+   9            See "The Engineering of Reliable Embedded Systems" (Chapter 2)
+  10            for further information about this scheduler - details below.
+  11          
+  12          -*--------------------------------------------------------------------*/
+  13          /*--------------------------------------------------------------------*-
+  14          
+  15            This code is copyright (c) 2014-2015 SafeTTy Systems Ltd.
+  16          
+  17            This code is adapted from a Time-Triggered Reference Design (TTRD)
+  18            that is documented in the following book: 
+  19          
+  20            Pont, M.J. (2014) 
+  21            "The Engineering of Reliable Embedded Systems: LPC1769 Edition", 
+  22            Published by SafeTTy Systems Ltd. ISBN: 978-0-9930355-0-0.
+  23          
+  24            Both the TTRDs and the above book ("the ERES book") describe 
+  25            patented* technology and are subject to copyright and other 
+  26            restrictions.
+  27          
+  28            This code may be used without charge: [i] by universities and 
+  29            colleges in courses for which a degree up to and including MSc 
+  30            level (or equivalent) is awarded; [ii] for non-commercial projects 
+  31            carried out by individuals and hobbyists.
+  32          
+  33            Where this code has been provided to you as part of a training 
+  34            course delivered by SafeTTy Systems Ltd, you may use it for 
+  35            evaluation purposes for a period of up to 12 months from the 
+  36            end date of this course, subject to the condition that no 
+  37            products (of any kind) based either on this code, or on the 
+  38            patented technology described in the ERES book, are released.
+  39          
+  40            Any and all other use of this code and / or the patented 
+  41            technology described in the ERES book requires purchase of a 
+  42            ReliabiliTTy Technology Licence:
+  43            http://www.safetty.net/products/reliabilitty
+  44          
+  45            Please contact SafeTTy Systems Ltd if you require clarification
+  46            of these licensing arrangements:
+  47            http://www.safetty.net/contact
+  48          
+  49            MoniTTor is a registered trademark of SafeTTy Systems Ltd.
+  50            PredicTTor is a registered trademark of SafeTTy Systems Ltd.
+  51            ReliabiliTTy is a registered trademark of SafeTTy Systems Ltd.
+  52            WarranTTor is a registered trademark of SafeTTy Systems Ltd.
+  53          
+C51 COMPILER V9.52.0.0   TTC_SCH_OD_F85X_003_0_C02B                                        07/10/2016 16:40:27 PAGE 2   
+
+  54            * Patents applied for.
+  55          
+  56          -*--------------------------------------------------------------------*/
+  57          
+  58          // Project header
+  59          #include "../main/main.h"
+  60          
+  61          // ------ Public variable definitions ------------------------------
+  62          
+  63          // May be used (for example) to report faults using Heartbeat LED.
+  64          // See Heartbeat task (if used) for basic fault-reporting mechanism
+  65          uint8_t Fault_code_G;
+  66          
+  67          // ------ Private variable definitions -----------------------------
+  68          
+  69          // The array of tasks
+  70          // Check array size in scheduler header file
+  71          sTask SCH_tasks_G[SCH_MAX_TASKS];
+  72          
+  73          // The current tick count
+  74          static volatile uint8_t Tick_count_G = 0;
+  75          
+  76          // Flag indicating whether any task is running
+  77          static volatile uint8_t Task_running_G = 0;
+  78          
+  79          // ------ Private function prototypes ------------------------------
+  80          
+  81          static void SCH_Go_To_Sleep(void);
+  82          
+  83          // Prototype for Timer 2 ISR
+  84          INTERRUPT_PROTO (SCH_UPDATE, INTERRUPT_TIMER2);
+  85          
+  86          /*--------------------------------------------------------------------*-
+  87          
+  88            SCH_Init()
+  89          
+  90            Scheduler initialisation function.  Prepares scheduler
+  91            data structures and sets up timer interrupts every millisecond
+  92          
+  93            You must call this function before using the scheduler.  
+  94          
+  95          -*--------------------------------------------------------------------*/
+  96          void SCH_Init(void)
+  97          {
+  98   1              uint8_t i;
+  99   1      
+ 100   1              // Reset the global fault variable
+ 101   1              Fault_code_G = 0;  
+ 102   1      
+ 103   1              for (i = 0; i < SCH_MAX_TASKS; i++) 
+ 104   1              {
+ 105   2                      SCH_tasks_G[i].pTask = 0;
+ 106   2              }
+ 107   1      
+ 108   1      #if 0    
+                      // Now set up Timer 2
+                      // [Based on SciLab example code]
+                      // Configure Timer2 to 16-bit auto-reload and generate an interrupt at
+                      // interval specified by <counts> using SYSCLK/48 as its time base.
+                      TMR2CN = 0x00;                // Stop Timer2; Clear TF2;
+                                                   // use SYSCLK/12 as timebase
+                      CKCON &= ~0x60;               // Timer2 clocked based on T2XCLK;
+C51 COMPILER V9.52.0.0   TTC_SCH_OD_F85X_003_0_C02B                                        07/10/2016 16:40:27 PAGE 3   
+
+              
+                      // Init reload values
+                      TMR2RL = -(SYSCLK / 12 / 1000);                   
+                      TMR2 = 0xffff;                // Set to reload immediately
+              #endif
+ 121   1      
+ 122   1      #if 0    
+                  WriteTW88(REG4E6, 0x0);                     // Timer2 Divider : remo timer
+                  WriteTW88(REG4E7, 0x1B);            // 27M/27 = 1usec
+                  
+                      SFR_T2CON = 0x12;               // 0001 0010 
+                                                                      // |||| |||+-- T2I0 \ Timer2 Input Selection 
+                                                                      // |||| ||+--- T2I1 / 00=No,  01=Timer,  10=Counter, 11=Gate
+                                                                      // |||| |+---- T2CM:  Compare mode
+                                                                      // |||| +----- T2R0 \ Timer2 Reload Mode 
+                                                                      // |||+------- T2R1     / 00=No,  01=No,     10=Auto,    11=pin T2EX
+                                                                      // ||+-------- ---
+                                                                      // |+--------- I3FR: Timer2 Compare0 Interrupt Edge...
+                                                                      // +---------- T2PS: Timer2 Prescaler
+                              
+                      SFR_TH2 = 0xff;         // 0xFF2E = 0x10000-0xD2 = 0x10000-210. 
+                      SFR_TL2 = 0x2E;         // it means 210 usec interval.     
+              #endif
+ 139   1      
+ 140   1              // Not yet started timer
+ 141   1      }
+ 142          
+ 143          /*--------------------------------------------------------------------*-
+ 144          
+ 145            SCH_Start()
+ 146          
+ 147            Starts the scheduler, by enabling SysTick interrupt.
+ 148          
+ 149            NOTES: 
+ 150            * All tasks must be added before starting scheduler.
+ 151            * Any other interrupts MUST be synchronised to this tick.  
+ 152          
+ 153          -*--------------------------------------------------------------------*/
+ 154          void SCH_Start(void) 
+ 155          {
+ 156   1          SFRB_ET0 = 1;   // Enable Timer2 interrupts
+ 157   1              SFRB_EA  = 1;   // Enable all interrupts
+ 158   1      }
+ 159          
+ 160          /*--------------------------------------------------------------------*-
+ 161          
+ 162            SCH_Update()
+ 163          
+ 164            This is the scheduler ISR.  It is called at a rate
+ 165            determined by the timer settings in the SCH_Init() function.
+ 166          
+ 167          -*--------------------------------------------------------------------*/
+ 168          
+ 169          void timer2_int(void) interrupt 5 using 1       // suggest: use register block 3                        
+ 170          {
+ 171   1      #if 0    
+                      // Increment tick count (only)
+                      Tick_count_G++;
+              
+                      // As this is a TTC scheduler, we don't usually expect
+                      // to have a task running when the timer ISR is called
+                      if (Task_running_G == 1)
+C51 COMPILER V9.52.0.0   TTC_SCH_OD_F85X_003_0_C02B                                        07/10/2016 16:40:27 PAGE 4   
+
+                      {
+                              // Simple fault reporting. via heartbeat / fault LED.
+                              // (This value is *not* reset.)
+                              Fault_code_G = FAULT_SCH_SYSTEM_OVERLOAD;
+                      }
+              #endif
+ 184   1          
+ 185   1              SFR_T2IF &= 0xfc;                       // Clear Interrupt Flag
+ 186   1      }
+ 187          
+ 188          void timer0_int(void) interrupt 1 using 1
+ 189          {
+ 190   1              // Increment tick count (only)
+ 191   1              Tick_count_G++;
+ 192   1      
+ 193   1              // As this is a TTC scheduler, we don't usually expect
+ 194   1              // to have a task running when the timer ISR is called
+ 195   1              if (Task_running_G == 1)
+ 196   1              {
+ 197   2                      // Simple fault reporting. via heartbeat / fault LED.
+ 198   2                      // (This value is *not* reset.)
+ 199   2                      Fault_code_G = FAULT_SCH_SYSTEM_OVERLOAD;
+ 200   2              }
+ 201   1      }
+ 202          
+ 203          /*--------------------------------------------------------------------*-
+ 204          
+ 205            SCH_Dispatch_Tasks()
+ 206          
+ 207            This is the 'dispatcher' function.  When a task (function)
+ 208            is due to run, SCH_Dispatch_Tasks() will run it.
+ 209            This function must be called (repeatedly) from the main loop.
+ 210          
+ 211          -*--------------------------------------------------------------------*/
+ 212          void SCH_Dispatch_Tasks(void) 
+ 213          {
+ 214   1              uint16_t Index;
+ 215   1              uint16_t Update_required = 0;
+ 216   1      
+ 217   1              SFRB_ET0 = 0;  // Protect shared resource (Tick_count_G)
+ 218   1              if (Tick_count_G > 0)
+ 219   1              {
+ 220   2                      Tick_count_G--;
+ 221   2                      Update_required = 1;
+ 222   2              }
+ 223   1              SFRB_ET0 = 1;
+ 224   1      
+ 225   1              while (Update_required)
+ 226   1              {
+ 227   2                      // Go through the task array
+ 228   2                      for (Index = 0; Index < SCH_MAX_TASKS; Index++)
+ 229   2                      {
+ 230   3                              // Check if there is a task at this location
+ 231   3                              if (SCH_tasks_G[Index].pTask)
+ 232   3                              {
+ 233   4                                      if (--SCH_tasks_G[Index].Delay == 0)
+ 234   4                                      {
+ 235   5                                              SFRB_ET0 = 0;
+ 236   5                                              Task_running_G = 1;  // Set flag
+ 237   5                                              SFRB_ET0 = 1;
+ 238   5                     
+ 239   5                                              (*SCH_tasks_G[Index].pTask)();  // Run the task
+C51 COMPILER V9.52.0.0   TTC_SCH_OD_F85X_003_0_C02B                                        07/10/2016 16:40:27 PAGE 5   
+
+ 240   5                     
+ 241   5                                              SFRB_ET0 = 0;
+ 242   5                                              Task_running_G = 0;  // Clear flag
+ 243   5                                              SFRB_ET0 = 1;
+ 244   5      
+ 245   5                                              // All tasks are periodic in this design
+ 246   5                                              // - schedule task to run again
+ 247   5                                              SCH_tasks_G[Index].Delay = SCH_tasks_G[Index].Period;
+ 248   5                                      }
+ 249   4                              }         
+ 250   3                      } 
+ 251   2      
+ 252   2                      SFRB_ET0 = 0;
+ 253   2                      if (Tick_count_G > 0)
+ 254   2                      {
+ 255   3                              Tick_count_G--;
+ 256   3                              Update_required = 1;
+ 257   3                      }
+ 258   2                      else
+ 259   2                      {
+ 260   3                              Update_required = 0;
+ 261   3                      }
+ 262   2                      SFRB_ET0 = 1;
+ 263   2              }
+ 264   1      
+ 265   1              // The scheduler may enter idle mode at this point (if used) 
+ 266   1              SCH_Go_To_Sleep();        
+ 267   1      }
+ 268          
+ 269          /*--------------------------------------------------------------------*-
+ 270          
+ 271            SCH_Add_Task()
+ 272          
+ 273            Causes a task (function) to be executed at regular intervals.
+ 274          
+ 275            pTask  - The name of the task (function) to be scheduled.
+ 276                     NOTE: All scheduled functions must be 'void, void' -
+ 277                     that is, they must take no parameters, and have 
+ 278                     a void return type (in this design).
+ 279                             
+ 280            DELAY  - The interval (ticks) before the task is first executed.
+ 281          
+ 282            PERIOD - Task period (in ticks).  Must be > 0.
+ 283          
+ 284            WCET   - Worst-Case Execution Time (microseconds)
+ 285                     [Used only for documentation in this design.]
+ 286          
+ 287            BCET   - Best-Case Execution Time (microseconds)
+ 288                     [Used only for documentation in this design.]
+ 289          
+ 290            RETURN VALUE:  
+ 291            Returns the position in the task array at which the task has been 
+ 292            added.  If the return value is SCH_MAX_TASKS then the task could 
+ 293            not be added to the array (there was insufficient space, or the
+ 294            requested task period was 0).
+ 295            If the return value is < SCH_MAX_TASKS, then the task was added
+ 296            successfully.  
+ 297          
+ 298            Note: this return value may be used (in later designs) to
+ 299            support the use of backup tasks.
+ 300           
+ 301          -*--------------------------------------------------------------------*/
+C51 COMPILER V9.52.0.0   TTC_SCH_OD_F85X_003_0_C02B                                        07/10/2016 16:40:27 PAGE 6   
+
+ 302          uint16_t SCH_Add_Task(void (* pTask)(), 
+ 303                                const uint16_t DELAY,
+ 304                                const uint16_t PERIOD,
+ 305                                const uint16_t WCET,
+ 306                                const uint16_t BCET
+ 307                                )
+ 308          {
+ 309   1              uint16_t Return_value = 0;
+ 310   1              uint16_t Index = 0;
+ 311   1         
+ 312   1              // First find a gap in the array (if there is one)
+ 313   1              while ((SCH_tasks_G[Index].pTask != 0) && (Index < SCH_MAX_TASKS))
+ 314   1              {
+ 315   2                      Index++;
+ 316   2              } 
+ 317   1         
+ 318   1              // Have we reached the end of the list?   
+ 319   1              if (Index == SCH_MAX_TASKS)
+ 320   1              {
+ 321   2                      // Task list is full
+ 322   2                      //
+ 323   2                      // Set the global fault variable
+ 324   2                      Fault_code_G = FAULT_SCH_TOO_MANY_TASKS;
+ 325   2      
+ 326   2                      // Also return a fault code
+ 327   2                      Return_value = SCH_MAX_TASKS;
+ 328   2              }
+ 329   1            
+ 330   1              // Check for "one shot" tasks
+ 331   1              // - not permitted in this design
+ 332   1              if (PERIOD == 0)
+ 333   1              {
+ 334   2                      // Set the global fault variable
+ 335   2                      Fault_code_G = FAULT_SCH_ONE_SHOT_TASK;
+ 336   2      
+ 337   2                      // Also return a fault code
+ 338   2                      Return_value = SCH_MAX_TASKS;
+ 339   2              }
+ 340   1      
+ 341   1              if (Return_value != SCH_MAX_TASKS)
+ 342   1              {
+ 343   2                      // If we're here, there is a space in the task array
+ 344   2                      // and the task to be added is periodic
+ 345   2                      SCH_tasks_G[Index].pTask  = pTask;
+ 346   2      
+ 347   2                      SCH_tasks_G[Index].Delay  = DELAY + 1;
+ 348   2                      SCH_tasks_G[Index].Period = PERIOD;
+ 349   2                      SCH_tasks_G[Index].WCET   = WCET;
+ 350   2                      SCH_tasks_G[Index].BCET   = BCET;
+ 351   2      
+ 352   2                      Return_value = Index;
+ 353   2              }
+ 354   1      
+ 355   1              return Return_value;
+ 356   1      }
+ 357          
+ 358          /*--------------------------------------------------------------------*-
+ 359          
+ 360            SCH_Go_To_Sleep()
+ 361          
+ 362            This scheduler enters 'sleep mode' between clock ticks
+ 363            to [i] reduce tick jitter; and [ii] save power.
+C51 COMPILER V9.52.0.0   TTC_SCH_OD_F85X_003_0_C02B                                        07/10/2016 16:40:27 PAGE 7   
+
+ 364          
+ 365            The next clock tick will return the processor
+ 366            to the normal operating state.
+ 367          
+ 368          -*--------------------------------------------------------------------*/
+ 369          void SCH_Go_To_Sleep()
+ 370          {
+ 371   1      ///     PCON |= 0x01; // Enter idle mode (generic 8051 version)
+ 372   1      ///     PCON = PCON;  // Reqd to avoid interrupt blocking
+ 373   1      }
+ 374          
+ 375          /*--------------------------------------------------------------------*-
+ 376            ------ END OF FILE -------------------------------------------------
+ 377          -*--------------------------------------------------------------------*/
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    785    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     25      17
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
